@@ -81,7 +81,7 @@ Rules:
 - If a page has no questions (e.g. cover, answer key section), skip it`;
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.5-flash-lite",
       systemInstruction: prompt,
     });
 
