@@ -21,14 +21,34 @@ function dataUrlToPageImage(dataUrl: string): PageImage {
   return { mimeType: matches[1], data: matches[2] };
 }
 
-const SYSTEM_PROMPT = `You are a precise exam question extractor for Nigerian UTME exams. Extract ALL questions from the provided scanned page images.
+
+
+export async function POST(request: Request) {
+  try {
+    const { pages, pageOffset = 0 } = await request.json();
+
+    if (!pages || !Array.isArray(pages) || pages.length === 0) {
+      return Response.json({ error: "No pages provided" }, { status: 400 });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return Response.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 });
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const firstPage = pageOffset + 1;
+    const lastPage = pageOffset + pages.length;
+    const prompt = `You are a precise exam question extractor for Nigerian UTME exams. Extract ALL questions from the provided scanned page images.
+
+These images correspond to actual pages ${firstPage} through ${lastPage} of a multi-year exam booklet.
 
 For each page:
 1. Detect year boundaries — each year's questions start on a specific page
 2. Extract every question completely: number, text, options A-D, and the correct answer
 3. Preserve mathematical equations in LaTeX (use $...$ for inline, $$...$$ for display)
 4. Ignore headers, footers, page numbers, and instructions not related to specific questions
-5. Determine which page numbers each year spans
+5. Determine which actual page numbers each year spans
 
 Return ONLY valid JSON — no markdown, no explanation, no code fences. The response must parse as raw JSON.
 
@@ -37,8 +57,8 @@ JSON structure:
   "years": [
     {
       "year": "2024",
-      "startPage": 1,
-      "endPage": 10,
+      "startPage": ${firstPage},
+      "endPage": ${lastPage},
       "questions": [
         {
           "questionNumber": 1,
@@ -57,26 +77,12 @@ Rules:
 - options: ONLY the option text, not the letter label
 - correctOption: must be "A", "B", "C", or "D"; leave empty string if uncertain
 - explanation: can be empty string
-- startPage/endPage: 1-based page numbers corresponding to the image order provided
+- startPage/endPage: use the actual page numbers shown above (not relative positions)
 - If a page has no questions (e.g. cover, answer key section), skip it`;
 
-export async function POST(request: Request) {
-  try {
-    const { pages } = await request.json();
-
-    if (!pages || !Array.isArray(pages) || pages.length === 0) {
-      return Response.json({ error: "No pages provided" }, { status: 400 });
-    }
-
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return Response.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 });
-    }
-
-    const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
-      systemInstruction: SYSTEM_PROMPT,
+      systemInstruction: prompt,
     });
 
     const parts = pages.map((url: string) => ({
