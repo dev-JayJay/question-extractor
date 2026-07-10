@@ -19,6 +19,7 @@ export default function Home() {
   const [viewing, setViewing] = useState<"upload" | "loading" | "preview">("upload");
   const [extractionMode, setExtractionMode] = useState<"none" | "ocr" | "ai">("none");
   const [aiQuestions, setAiQuestions] = useState<Record<string, Question[]>>({});
+  const [isPartial, setIsPartial] = useState(false);
 
   const handleFileSelect = useCallback((f: File) => {
     setFile(f);
@@ -43,6 +44,7 @@ export default function Home() {
 
   const handleAiComplete = useCallback((result: AiExtractResult) => {
     setExtractionMode("ai");
+    setIsPartial(!!result._partial);
     setPageTexts(pageImages.map(() => ""));
     const yearSplits: YearSplit[] = result.years.map((y) => ({
       year: y.year,
@@ -125,6 +127,11 @@ export default function Home() {
 
         {viewing === "preview" && pageImages.length > 0 && (
           <div className="flex w-full max-w-6xl flex-col gap-6">
+            {isPartial && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                Some batches could not be extracted. Results may be incomplete. You can edit or re-upload the PDF.
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">
                 {file?.name} — {pageImages.length} pages

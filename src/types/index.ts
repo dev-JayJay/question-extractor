@@ -32,6 +32,15 @@ export interface AiYearResult {
   questions: Question[];
 }
 
+export interface AiUsage {
+  promptTokens: number;
+  candidateTokens: number;
+  totalTokens: number;
+}
+
 export interface AiExtractResult {
   years: AiYearResult[];
+  _usage?: AiUsage;
+  _partial?: boolean;
+  _failedBatches?: number[];
 }
