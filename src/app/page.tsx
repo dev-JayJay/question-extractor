@@ -4,10 +4,11 @@ import { useCallback, useState } from "react";
 import PdfUploader from "@/components/PdfUploader";
 import PdfRenderer from "@/components/PdfRenderer";
 import OcrProcessor from "@/components/OcrProcessor";
+import AiExtractor from "@/components/AiExtractor";
 import YearSplitter from "@/components/YearSplitter";
 import QuestionParser from "@/components/QuestionParser";
 import ExportButton from "@/components/ExportButton";
-import type { YearSplit, Question } from "@/types";
+import type { YearSplit, Question, AiExtractResult } from "@/types";
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
@@ -16,6 +17,8 @@ export default function Home() {
   const [splits, setSplits] = useState<YearSplit[]>([]);
   const [parsedQuestions, setParsedQuestions] = useState<Record<string, Question[]>>({});
   const [viewing, setViewing] = useState<"upload" | "loading" | "preview">("upload");
+  const [extractionMode, setExtractionMode] = useState<"none" | "ocr" | "ai">("none");
+  const [aiQuestions, setAiQuestions] = useState<Record<string, Question[]>>({});
 
   const handleFileSelect = useCallback((f: File) => {
     setFile(f);
@@ -23,6 +26,8 @@ export default function Home() {
     setPageTexts([]);
     setSplits([]);
     setParsedQuestions({});
+    setAiQuestions({});
+    setExtractionMode("none");
     setViewing("loading");
   }, []);
 
@@ -33,7 +38,24 @@ export default function Home() {
 
   const handleOcrComplete = useCallback((texts: string[]) => {
     setPageTexts(texts);
+    setExtractionMode("ocr");
   }, []);
+
+  const handleAiComplete = useCallback((result: AiExtractResult) => {
+    setExtractionMode("ai");
+    setPageTexts(pageImages.map(() => ""));
+    const yearSplits: YearSplit[] = result.years.map((y) => ({
+      year: y.year,
+      startPage: y.startPage,
+      endPage: y.endPage,
+    }));
+    setSplits(yearSplits);
+    const questions: Record<string, Question[]> = {};
+    for (const y of result.years) {
+      questions[y.year] = y.questions;
+    }
+    setAiQuestions(questions);
+  }, [pageImages]);
 
   const handleSplitsConfirmed = useCallback((confirmed: YearSplit[]) => {
     setSplits(confirmed);
@@ -57,6 +79,8 @@ export default function Home() {
     setPageTexts([]);
     setSplits([]);
     setParsedQuestions({});
+    setAiQuestions({});
+    setExtractionMode("none");
     setViewing("upload");
   };
 
@@ -105,15 +129,22 @@ export default function Home() {
               <h2 className="text-lg font-semibold">
                 {file?.name} — {pageImages.length} pages
               </h2>
-              {pageTexts.length === 0 && (
-                <OcrProcessor
-                  pageImages={pageImages}
-                  onOcrComplete={handleOcrComplete}
-                />
+              {extractionMode === "none" && (
+                <div className="flex items-center gap-3">
+                  <OcrProcessor
+                    pageImages={pageImages}
+                    onOcrComplete={handleOcrComplete}
+                  />
+                  <span className="text-sm text-zinc-400">or</span>
+                  <AiExtractor
+                    pageImages={pageImages}
+                    onComplete={handleAiComplete}
+                  />
+                </div>
               )}
             </div>
 
-            {pageTexts.length > 0 && splits.length === 0 && (
+            {extractionMode === "ocr" && pageTexts.length > 0 && splits.length === 0 && (
               <YearSplitter
                 pageTexts={pageTexts}
                 totalPages={pageImages.length}
@@ -135,6 +166,7 @@ export default function Home() {
                       endPage={split.endPage}
                       year={split.year}
                       onQuestionsReady={handleQuestionsReady}
+                      initialQuestions={aiQuestions[key]}
                     />
                   );
                 })}

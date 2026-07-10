@@ -24,3 +24,14 @@ export interface PageData {
 }
 
 export type ProcessingStatus = "idle" | "rendering" | "ocr" | "parsing" | "done" | "error";
+
+export interface AiYearResult {
+  year: string;
+  startPage: number;
+  endPage: number;
+  questions: Question[];
+}
+
+export interface AiExtractResult {
+  years: AiYearResult[];
+}

@@ -11,6 +11,7 @@ interface QuestionParserProps {
   endPage: number;
   year: string;
   onQuestionsReady: (year: string, questions: Question[]) => void;
+  initialQuestions?: Question[];
 }
 
 export default function QuestionParser({
@@ -19,9 +20,10 @@ export default function QuestionParser({
   endPage,
   year,
   onQuestionsReady,
+  initialQuestions,
 }: QuestionParserProps) {
   const [questions, setQuestions] = useState<Question[]>(() =>
-    parseQuestions(pageTexts.slice(startPage - 1, endPage))
+    initialQuestions ?? parseQuestions(pageTexts.slice(startPage - 1, endPage))
   );
   const [initialParseDone] = useState(true);
   const [previewFields, setPreviewFields] = useState<Record<string, boolean>>({});
