@@ -99,7 +99,7 @@ Rules:
       generationConfig: {
         temperature: 0.05,
         topP: 0.95,
-        maxOutputTokens: 65536,
+        maxOutputTokens: 16384,
       },
       safetySettings: [
         { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },

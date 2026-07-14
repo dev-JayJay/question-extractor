@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef } from "react";
 import type { AiExtractResult, Question } from "@/types";
 
-const BATCH_SIZE = 8;
+const BATCH_SIZE = 4;
 const MAX_WIDTH = 600;
 const MAX_RETRIES = 3;
 
@@ -126,6 +126,9 @@ export default function AiExtractor({ pageImages, onComplete }: AiExtractorProps
     let tokAccum = 0;
     let reqAccum = 0;
 
+    let lastRequestTime = 0;
+    const MIN_GAP_MS = 3000;
+
     async function processPages(
       pageStart: number,
       pageEnd: number,
@@ -139,6 +142,13 @@ export default function AiExtractor({ pageImages, onComplete }: AiExtractorProps
             batchProgress.total,
             `${label} (pages ${pageStart + 1}–${pageEnd})`,
           );
+
+          const now = Date.now();
+          const elapsed = now - lastRequestTime;
+          if (elapsed < MIN_GAP_MS) {
+            await new Promise((r) => setTimeout(r, MIN_GAP_MS - elapsed));
+          }
+          lastRequestTime = Date.now();
 
           const res = await fetch("/api/extract", {
             method: "POST",
@@ -176,11 +186,13 @@ export default function AiExtractor({ pageImages, onComplete }: AiExtractorProps
             msg.includes("Candidate was blocked");
 
           if (attempt < MAX_RETRIES && isRetryable) {
-            const delay = 1000 * Math.pow(2, attempt - 1);
+            const retryMatch = msg.match(/retry[^.]*?in\s+([\d.]+)\s*s/i);
+            const retryDelay = retryMatch ? parseFloat(retryMatch[1]) * 1000 : null;
+            const delay = retryDelay ?? (1000 * Math.pow(2, attempt - 1));
             onProgress(
               batchProgress.current,
               batchProgress.total,
-              `${label} failed (attempt ${attempt}/${MAX_RETRIES}) — retrying in ${delay / 1000}s...`,
+              `${label} failed (attempt ${attempt}/${MAX_RETRIES}) — retrying in ${(delay / 1000).toFixed(1)}s...`,
             );
             await new Promise((r) => setTimeout(r, delay));
           } else if (isTimeout && pageEnd - pageStart > 1) {
