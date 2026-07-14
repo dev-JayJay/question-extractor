@@ -126,21 +126,24 @@ export default function AiExtractor({ pageImages, onComplete }: AiExtractorProps
     let tokAccum = 0;
     let reqAccum = 0;
 
-    for (let b = 0; b < totalBatches; b++) {
-      if (batchFilter && !batchFilter.has(b)) continue;
-      const start = b * BATCH_SIZE;
-      const end = Math.min(start + BATCH_SIZE, compressed.length);
-      const batch = compressed.slice(start, end);
-      onProgress(b + 1, totalBatches, `Batch ${b + 1}/${totalBatches} (pages ${start + 1}–${end})`);
-
-      let batchOk = false;
-
+    async function processPages(
+      pageStart: number,
+      pageEnd: number,
+      label: string,
+    ): Promise<boolean> {
       for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
+          const batch = compressed.slice(pageStart, pageEnd);
+          onProgress(
+            batchProgress.current,
+            batchProgress.total,
+            `${label} (pages ${pageStart + 1}–${pageEnd})`,
+          );
+
           const res = await fetch("/api/extract", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ pages: batch, pageOffset: start }),
+            body: JSON.stringify({ pages: batch, pageOffset: pageStart }),
           });
 
           if (!res.ok) {
@@ -150,7 +153,6 @@ export default function AiExtractor({ pageImages, onComplete }: AiExtractorProps
 
           const result: AiExtractResult = await res.json();
           completedRef.current.push(result);
-          batchOk = true;
 
           if (result._usage) {
             tokAccum += result._usage.totalTokens;
@@ -158,34 +160,61 @@ export default function AiExtractor({ pageImages, onComplete }: AiExtractorProps
           reqAccum++;
           incrementDailyRequests();
           setTotalRequestsToday(getDailyRequests());
-          break;
+          return true;
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Unknown error";
+          const isTimeout =
+            msg.includes("504") ||
+            msg.includes("timeout") ||
+            msg.includes("Gateway Timeout") ||
+            msg.includes("FUNCTION_INVOCATION_TIMEOUT");
           const isRetryable =
             msg.includes("503") ||
             msg.includes("429") ||
+            isTimeout ||
             msg.includes("RECITATION") ||
             msg.includes("Candidate was blocked");
 
           if (attempt < MAX_RETRIES && isRetryable) {
             const delay = 1000 * Math.pow(2, attempt - 1);
             onProgress(
-              b + 1,
-              totalBatches,
-              `Batch ${b + 1}/${totalBatches} failed (attempt ${attempt}/${MAX_RETRIES}) — retrying in ${delay / 1000}s...`,
+              batchProgress.current,
+              batchProgress.total,
+              `${label} failed (attempt ${attempt}/${MAX_RETRIES}) — retrying in ${delay / 1000}s...`,
             );
             await new Promise((r) => setTimeout(r, delay));
-          } else if (attempt < MAX_RETRIES) {
-            throw err;
+          } else if (isTimeout && pageEnd - pageStart > 1) {
+            const mid = Math.floor((pageStart + pageEnd) / 2);
+            onProgress(
+              batchProgress.current,
+              batchProgress.total,
+              `${label} timed out — splitting into sub-batches...`,
+            );
+            const leftOk = await processPages(pageStart, mid, `${label}a`);
+            const rightOk = await processPages(mid, pageEnd, `${label}b`);
+            return leftOk || rightOk;
           } else {
-            failed.push(b);
+            return false;
           }
         }
       }
+      return false;
+    }
 
-      if (!batchOk) {
-        onProgress(b + 1, totalBatches, `Batch ${b + 1}/${totalBatches} failed after ${MAX_RETRIES} attempts.`);
-      }
+    for (let b = 0; b < totalBatches; b++) {
+      if (batchFilter && !batchFilter.has(b)) continue;
+
+      const start = b * BATCH_SIZE;
+      const end = Math.min(start + BATCH_SIZE, compressed.length);
+      setBatchProgress({ current: b + 1, total: totalBatches });
+      onProgress(
+        b + 1,
+        totalBatches,
+        `Batch ${b + 1}/${totalBatches} (pages ${start + 1}–${end})`,
+      );
+
+      const ok = await processPages(start, end, `Batch ${b + 1}`);
+      if (!ok) failed.push(b);
     }
 
     setTotalTokens((prev) => prev + tokAccum);
