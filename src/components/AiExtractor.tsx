@@ -115,6 +115,7 @@ export default function AiExtractor({ pageImages, onComplete }: AiExtractorProps
 
   const completedRef = useRef<AiExtractResult[]>([]);
   const compressedRef = useRef<string[] | null>(null);
+  const lastRequestTimeRef = useRef(0);
 
   async function runBatches(
     compressed: string[],
@@ -126,7 +127,6 @@ export default function AiExtractor({ pageImages, onComplete }: AiExtractorProps
     let tokAccum = 0;
     let reqAccum = 0;
 
-    let lastRequestTime = 0;
     const MIN_GAP_MS = 3000;
 
     async function processPages(
@@ -144,11 +144,11 @@ export default function AiExtractor({ pageImages, onComplete }: AiExtractorProps
           );
 
           const now = Date.now();
-          const elapsed = now - lastRequestTime;
+          const elapsed = now - lastRequestTimeRef.current;
           if (elapsed < MIN_GAP_MS) {
             await new Promise((r) => setTimeout(r, MIN_GAP_MS - elapsed));
           }
-          lastRequestTime = Date.now();
+          lastRequestTimeRef.current = Date.now();
 
           const res = await fetch("/api/extract", {
             method: "POST",
@@ -173,6 +173,14 @@ export default function AiExtractor({ pageImages, onComplete }: AiExtractorProps
           return true;
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Unknown error";
+
+          if (msg.includes("You exceeded your current quota")) {
+            throw new Error(
+              "Daily Gemini quota of 20 requests used up for gemini-3.5-flash. " +
+              "Partial results are saved. Try again tomorrow, or add a billing account at https://ai.google.dev/."
+            );
+          }
+
           const isTimeout =
             msg.includes("504") ||
             msg.includes("timeout") ||
