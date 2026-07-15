@@ -191,7 +191,9 @@ export default function AiExtractor({ pageImages, onComplete }: AiExtractorProps
             msg.includes("429") ||
             isTimeout ||
             msg.includes("RECITATION") ||
-            msg.includes("Candidate was blocked");
+            msg.includes("Candidate was blocked") ||
+            msg.includes("is not valid JSON") ||
+            msg.includes("in JSON at position");
 
           if (attempt < MAX_RETRIES && isRetryable) {
             const retryMatch = msg.match(/retry[^.]*?in\s+([\d.]+)\s*s/i);

@@ -99,7 +99,7 @@ Rules:
       generationConfig: {
         temperature: 0.05,
         topP: 0.95,
-        maxOutputTokens: 16384,
+        maxOutputTokens: 65536,
       },
       safetySettings: [
         { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
@@ -112,8 +112,25 @@ Rules:
 
     const text = result.response.text();
 
-    const jsonMatch = text.replace(/```(?:json)?\s*/g, "").trim();
-    const parsed: AiResult = JSON.parse(jsonMatch);
+    function extractJson(raw: string): string {
+      const start = raw.indexOf("{");
+      const end = raw.lastIndexOf("}");
+      if (start === -1 || end === -1 || end < start)
+        throw new Error("No JSON object found in response");
+      return raw.slice(start, end + 1);
+    }
+
+    function repairJson(raw: string): string {
+      return extractJson(raw).replace(/,(\s*[}\]])/g, "$1");
+    }
+
+    let parsed: AiResult;
+    try {
+      parsed = JSON.parse(repairJson(text));
+    } catch {
+      const trimmed = extractJson(text).replace(/,\s*"[^"]*"\s*:[^,}]*(\s*[}\]])/g, "$1");
+      parsed = JSON.parse(trimmed);
+    }
 
     const usage = result.response.usageMetadata;
     const _usage = usage
